@@ -4,7 +4,7 @@
 
 Built for **#BuildHybridAI 2026** with **Firebase AI Logic hybrid inference**: Gemini Nano runs on-device in Chrome, and Gemini in the cloud is used only when needed, and only on text that has already had your personal details removed.
 
-> 🌐 Live app: _add hosted URL_ · 🎬 Demo video: _add YouTube link_ · 🧩 Chrome extension: [`/extension`](extension)
+> 🌐 **Live app: https://kinguard-3e9fb.web.app** · 🎬 Demo video: _add YouTube link_ · 🧩 Chrome extension: [`/extension`](extension)
 
 ---
 

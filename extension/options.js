@@ -1,6 +1,6 @@
 const input = document.getElementById('url');
 const status = document.getElementById('status');
-chrome.storage.sync.get('appUrl').then(({ appUrl }) => { input.value = appUrl || 'http://localhost:5173/'; });
+chrome.storage.sync.get('appUrl').then(({ appUrl }) => { input.value = appUrl || 'https://kinguard-3e9fb.web.app/'; });
 document.getElementById('save').addEventListener('click', async () => {
   try {
     const u = new URL(input.value.trim());

@@ -1,7 +1,7 @@
 // Kinguard extension: hands selected text (or the page's text) to the Kinguard web app,
 // where Firebase AI Logic runs. Text is passed through extension storage and a
 // same-origin postMessage bridge, never through a URL.
-const DEFAULT_APP_URL = 'http://localhost:5173/';
+const DEFAULT_APP_URL = 'https://kinguard-3e9fb.web.app/';
 const MAX_CHARS = 8000;
 const FRESH_MS = 2 * 60 * 1000;
 
