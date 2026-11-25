@@ -122,3 +122,12 @@ describe('model output parsing', () => {
     expect(t.redFlags).toEqual(['a']);
   });
 });
+
+import { isTransient } from '../src/ai/engine';
+describe('cloud resilience', () => {
+  it('treats overload errors as transient but not auth errors', () => {
+    expect(isTransient(new Error('[500 ] This model is currently experiencing high demand.'))).toBe(true);
+    expect(isTransient(new Error('[429 ] Resource exhausted'))).toBe(true);
+    expect(isTransient(new Error('[401 ] Firebase App Check token is invalid.'))).toBe(false);
+  });
+});

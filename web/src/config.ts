@@ -11,6 +11,8 @@ export interface RoutingPolicy {
   hybridCloudModel: string;
   /** Stronger cloud model for the deep check on redacted text. */
   deepCheckModel: string;
+  /** Used when the deep-check model is overloaded. */
+  deepCheckFallbackModel: string;
   /** Escalate low-confidence on-device verdicts even when below the threshold. */
   escalateLowConfidence: boolean;
   /** Max characters analysed per check (keeps on-device prompts under the token cap). */
@@ -22,6 +24,7 @@ export const DEFAULT_POLICY: RoutingPolicy = {
   familyAlertThreshold: 70,
   hybridCloudModel: 'gemini-3.5-flash-lite',
   deepCheckModel: 'gemini-3.8-flash',
+  deepCheckFallbackModel: 'gemini-3.5-flash-lite',
   escalateLowConfidence: true,
   maxInputChars: 6000,
 };
@@ -31,6 +34,7 @@ const KEYS: Record<keyof RoutingPolicy, string> = {
   familyAlertThreshold: 'family_alert_threshold',
   hybridCloudModel: 'hybrid_cloud_model',
   deepCheckModel: 'deep_check_model',
+  deepCheckFallbackModel: 'deep_check_fallback_model',
   escalateLowConfidence: 'escalate_low_confidence',
   maxInputChars: 'max_input_chars',
 };
@@ -51,6 +55,7 @@ export async function loadPolicy(rc: RemoteConfig | null): Promise<RoutingPolicy
     familyAlertThreshold: getValue(rc, KEYS.familyAlertThreshold).asNumber() || DEFAULT_POLICY.familyAlertThreshold,
     hybridCloudModel: getValue(rc, KEYS.hybridCloudModel).asString() || DEFAULT_POLICY.hybridCloudModel,
     deepCheckModel: getValue(rc, KEYS.deepCheckModel).asString() || DEFAULT_POLICY.deepCheckModel,
+    deepCheckFallbackModel: getValue(rc, KEYS.deepCheckFallbackModel).asString() || DEFAULT_POLICY.deepCheckFallbackModel,
     escalateLowConfidence: getValue(rc, KEYS.escalateLowConfidence).asBoolean(),
     maxInputChars: getValue(rc, KEYS.maxInputChars).asNumber() || DEFAULT_POLICY.maxInputChars,
   };

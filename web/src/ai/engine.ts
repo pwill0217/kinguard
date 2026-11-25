@@ -79,6 +79,7 @@ export class FirebaseEngine implements Engine {
   private screenshotCloudModel: GenerativeModel;
   private triageModel: GenerativeModel;
   private deepModel: GenerativeModel;
+  private deepFallbackModel: GenerativeModel;
 
   constructor(ai: AI, policy: RoutingPolicy) {
     this.piiModel = getGenerativeModel(ai, jsonParams(piiSchema, InferenceMode.ONLY_ON_DEVICE, policy.hybridCloudModel, 0));
@@ -86,6 +87,8 @@ export class FirebaseEngine implements Engine {
     this.screenshotCloudModel = getGenerativeModel(ai, jsonParams(screenshotSchema, InferenceMode.ONLY_IN_CLOUD, policy.hybridCloudModel, 0));
     this.triageModel = getGenerativeModel(ai, jsonParams(triageSchema, InferenceMode.PREFER_ON_DEVICE, policy.hybridCloudModel));
     this.deepModel = getGenerativeModel(ai, jsonParams(deepSchema, InferenceMode.ONLY_IN_CLOUD, policy.deepCheckModel));
+    // If the primary cloud model is overloaded, retry once and then fall back to a second model.
+    this.deepFallbackModel = getGenerativeModel(ai, jsonParams(deepSchema, InferenceMode.ONLY_IN_CLOUD, policy.deepCheckFallbackModel));
   }
 
   deviceStatus() {
@@ -122,9 +125,27 @@ export class FirebaseEngine implements Engine {
   }
 
   async deepCheck(redactedText: string, triage: Triage & { where: string }, linkSignals: string[]) {
-    const res = await this.deepModel.generateContent(deepPrompt(redactedText, triage, linkSignals));
-    return normalizeDeep(parseJson(res.response.text()));
+    const prompt = deepPrompt(redactedText, triage, linkSignals);
+    const attempts: GenerativeModel[] = [this.deepModel, this.deepModel, this.deepFallbackModel];
+    let lastError: unknown;
+    for (let i = 0; i < attempts.length; i++) {
+      try {
+        const res = await attempts[i].generateContent(prompt);
+        return normalizeDeep(parseJson(res.response.text()));
+      } catch (e) {
+        lastError = e;
+        if (!isTransient(e)) throw e;
+        if (i === 0) await new Promise((r) => setTimeout(r, 1200));
+      }
+    }
+    throw lastError;
   }
+}
+
+/** Overloaded / rate-limited / temporary server errors are worth retrying elsewhere. */
+export function isTransient(e: unknown): boolean {
+  const msg = String((e as Error)?.message ?? e);
+  return /\[(429|500|502|503|504)\b|high demand|overloaded|unavailable|RESOURCE_EXHAUSTED|malformed JSON/i.test(msg);
 }
 
 function assertSource(actual: string | undefined, expected: string, step: string) {
