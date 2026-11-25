@@ -1,0 +1,10 @@
+{
+  "parameters": {
+    "deep_check_threshold": { "defaultValue": { "value": "35" }, "valueType": "NUMBER", "description": "First-pass risk score (0-100) at which Kinguard escalates the redacted text to the cloud deep check." },
+    "family_alert_threshold": { "defaultValue": { "value": "70" }, "valueType": "NUMBER", "description": "Risk score at which the family circle is alerted." },
+    "hybrid_cloud_model": { "defaultValue": { "value": "gemini-3.5-flash-lite" }, "valueType": "STRING", "description": "Cloud fallback model for the hybrid first-pass screen." },
+    "deep_check_model": { "defaultValue": { "value": "gemini-3.8-flash" }, "valueType": "STRING", "description": "Cloud model for the expert double-check (redacted text only)." },
+    "escalate_low_confidence": { "defaultValue": { "value": "true" }, "valueType": "BOOLEAN", "description": "Escalate low-confidence on-device verdicts even below the threshold." },
+    "max_input_chars": { "defaultValue": { "value": "6000" }, "valueType": "NUMBER", "description": "Max characters analysed per check (keeps on-device prompts under the token cap)." }
+  }
+}

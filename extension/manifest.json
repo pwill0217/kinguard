@@ -1,0 +1,19 @@
+{
+  "manifest_version": 3,
+  "name": "Kinguard: Is this a scam?",
+  "short_name": "Kinguard",
+  "version": "1.0.0",
+  "description": "Right-click any message, email or web page to check it for scams privately with Kinguard.",
+  "icons": { "16": "icons/icon-16.png", "32": "icons/icon-32.png", "48": "icons/icon-48.png", "128": "icons/icon-128.png" },
+  "action": { "default_title": "Check this page with Kinguard", "default_icon": { "16": "icons/icon-16.png", "32": "icons/icon-32.png" } },
+  "background": { "service_worker": "background.js" },
+  "permissions": ["contextMenus", "storage", "activeTab", "scripting"],
+  "options_page": "options.html",
+  "content_scripts": [
+    {
+      "matches": ["https://*.web.app/*", "https://*.firebaseapp.com/*", "http://localhost/*", "http://127.0.0.1/*"],
+      "js": ["bridge.js"],
+      "run_at": "document_idle"
+    }
+  ]
+}
