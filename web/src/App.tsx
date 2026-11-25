@@ -82,7 +82,7 @@ export default function App() {
   // Family state
   const [me, setMe] = useState<Me | null>(USE_MOCK ? mockFamily.me : null);
   const [authReady, setAuthReady] = useState(USE_MOCK || !services);
-  const [circles, setCircles] = useState<Circle[]>(USE_MOCK ? mockFamily.circles : []);
+  const [circles, setCircles] = useState<Circle[]>(USE_MOCK && !location.search.includes('solo') ? mockFamily.circles : []);
   const [circleId, setCircleId] = useState<string | null>(() => localStorage.getItem('kinguard.circle'));
   const [members, setMembers] = useState<Member[]>(USE_MOCK ? mockFamily.members : []);
   const [alerts, setAlerts] = useState<FamilyAlert[]>(USE_MOCK ? mockFamily.alerts : []);
@@ -92,6 +92,7 @@ export default function App() {
   const [joinCode, setJoinCode] = useState<string | null>(joinCodeFromUrl);
   const [createOpen, setCreateOpen] = useState(false);
   const [familyError, setFamilyError] = useState<string | null>(null);
+  const [inviteAfterCreate, setInviteAfterCreate] = useState(false);
 
   const circle = useMemo(() => circles.find((c) => c.id === circleId) ?? circles[0] ?? null, [circles, circleId]);
 
@@ -185,6 +186,7 @@ export default function App() {
       const { db, me } = need();
       const id = await fam.createCircle(db, me, name, prot);
       setCircleId(id);
+      setInviteAfterCreate(true);
     },
     previewInvite: async (code) => fam.previewInvite(need().db, code),
     joinCircle: async (inv) => {
@@ -368,7 +370,17 @@ export default function App() {
           ) : !circle ? (
             <NoCircle me={me} act={act} initialCode={joinCode} />
           ) : (
-            <CircleHub me={me} circle={circle} members={members} alerts={alerts} invites={invites} act={act} onCheck={goCheck} />
+            <CircleHub
+              me={me}
+              circle={circle}
+              members={members}
+              alerts={alerts}
+              invites={invites}
+              act={act}
+              onCheck={goCheck}
+              autoInvite={inviteAfterCreate && members.some((m) => m.uid === me.uid)}
+              onAutoInviteShown={() => setInviteAfterCreate(false)}
+            />
           ))}
         {familyError && tab === 'home' && <p className="error">{familyError}</p>}
         {tab === 'check' && <CheckView text={text} setText={setText} busy={stage} error={error} onCheck={(r) => void check(r)} />}

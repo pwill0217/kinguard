@@ -94,25 +94,57 @@ export function SignInCard({ onSignIn, available }: { onSignIn: () => Promise<vo
 
 export function NoCircle({ me, act, initialCode }: { me: Me; act: CircleActions; initialCode?: string | null }) {
   const [sheet, setSheet] = useState<'create' | 'join' | null>(initialCode ? 'join' : null);
+  const { busy, error, run } = useBusy();
+  const lastName = me.name.split(' ').slice(1).join(' ');
+  const defaultName = lastName ? `The ${lastName} Family` : `${me.firstName}'s Family`;
   return (
     <>
-      <section className="hero-card">
-        <p className="eyebrow">Welcome, {me.firstName}</p>
-        <h1>Set up your family circle</h1>
-        <p>A circle connects the people who look out for each other. Up to {MAX_MEMBERS} people.</p>
+      <section className="hero-card status status-ok">
+        <div className="solo">
+          <Avatar name={me.name} photoURL={me.photoURL} seed={me.uid} size={84} />
+          <div>
+            <p className="eyebrow">Welcome, {me.firstName}</p>
+            <h1>It's just you so far</h1>
+            <p>Invite the people you look out for, or the people who look out for you. Up to {MAX_MEMBERS} per family.</p>
+          </div>
+        </div>
+        <div className="status-bottom">
+          <button className="btn btn-light" disabled={busy} onClick={() => run(() => act.createCircle(defaultName, false))}>
+            <IconPlus size={18} /> {busy ? 'Setting up…' : 'Invite family'}
+          </button>
+          <button className="btn btn-glass" onClick={() => setSheet('join')}>I have a code</button>
+        </div>
       </section>
-      <div className="choice-grid">
-        <button className="choice" onClick={() => setSheet('create')}>
-          <span className="choice-icon"><IconPlus /></span>
-          <strong>Create a circle</strong>
-          <span>For your family. You'll invite people next.</span>
-        </button>
-        <button className="choice" onClick={() => setSheet('join')}>
-          <span className="choice-icon alt"><IconUsers /></span>
-          <strong>Join with a code</strong>
-          <span>Someone invited you with a 6-letter code.</span>
-        </button>
-      </div>
+      {error && <p className="error">{error}</p>}
+
+      <section className="card">
+        <div className="section-head">
+          <h2>Your family <span className="count">1/{MAX_MEMBERS}</span></h2>
+        </div>
+        <ul className="member-list">
+          <li>
+            <div className="member-row">
+              <Avatar name={me.name} photoURL={me.photoURL} seed={me.uid} />
+              <span className="grow">
+                <span className="member-name">{me.name} <span className="you">(you)</span></span>
+                <span className="member-status">{me.email}</span>
+              </span>
+            </div>
+          </li>
+          {[1, 2].map((i) => (
+            <li key={i}>
+              <button className="member-row ghost-row" disabled={busy} onClick={() => run(() => act.createCircle(defaultName, false))}>
+                <span className="avatar ghost-avatar" style={{ width: 44, height: 44 }}><IconPlus size={18} /></span>
+                <span className="grow">
+                  <span className="member-name muted">{i === 1 ? 'Add a parent or grandparent' : 'Add a helper'}</span>
+                  <span className="member-status">{i === 1 ? "You'll get a heads-up if they run into a likely scam" : 'A sibling or relative who also gets alerts'}</span>
+                </span>
+              </button>
+            </li>
+          ))}
+        </ul>
+        <button className="link" onClick={() => setSheet('create')}>Or create a family with a custom name</button>
+      </section>
       <CreateCircleSheet open={sheet === 'create'} me={me} onClose={() => setSheet(null)} act={act} />
       <JoinSheet open={sheet === 'join'} onClose={() => setSheet(null)} act={act} initialCode={initialCode} />
     </>
@@ -206,6 +238,8 @@ export function CircleHub(props: {
   invites: Invite[];
   act: CircleActions;
   onCheck: () => void;
+  autoInvite?: boolean;
+  onAutoInviteShown?: () => void;
 }) {
   const { me, circle, members, alerts, invites, act } = props;
   const myRole = members.find((m) => m.uid === me.uid)?.role;
@@ -216,6 +250,13 @@ export function CircleHub(props: {
   const needsAttention = alerts.filter((a) => a.verdict !== 'safe' && (a.createdAt?.getTime() ?? Date.now()) > weekAgo && a.ackBy.length === 0 && a.fromUid !== me.uid);
   const protectedCount = members.filter((m) => m.protected).length;
   const full = members.length >= MAX_MEMBERS;
+  useEffect(() => {
+    if (props.autoInvite && manager) {
+      setSheet('invite');
+      props.onAutoInviteShown?.();
+    }
+  }, [props.autoInvite, manager]); // eslint-disable-line react-hooks/exhaustive-deps
+  const solo = members.length === 1;
 
   return (
     <>
@@ -223,16 +264,20 @@ export function CircleHub(props: {
         <div className="status-top">
           <div>
             <p className="eyebrow">{circle.name}</p>
-            <h1>{needsAttention.length ? `${needsAttention.length} warning${needsAttention.length > 1 ? 's' : ''} need${needsAttention.length > 1 ? '' : 's'} attention` : "Everyone's safe"}</h1>
+            <h1>{needsAttention.length ? `${needsAttention.length} warning${needsAttention.length > 1 ? 's' : ''} need${needsAttention.length > 1 ? '' : 's'} attention` : solo ? "It's just you so far" : "Everyone's safe"}</h1>
             <p>
-              {protectedCount} protected · {members.length - protectedCount} helper{members.length - protectedCount === 1 ? '' : 's'}
+              {solo ? 'Invite your family to start looking out for each other.' : `${protectedCount} protected · ${members.length - protectedCount} helper${members.length - protectedCount === 1 ? '' : 's'}`}
             </p>
           </div>
           <span className="status-badge">{needsAttention.length ? <IconBell size={28} /> : <IconShield size={28} />}</span>
         </div>
         <div className="status-bottom">
-          <AvatarStack people={members} size={38} />
-          <button className="btn btn-light" onClick={props.onCheck}>Check a message</button>
+          <AvatarStack people={members} size={solo ? 48 : 38} />
+          {solo && manager ? (
+            <button className="btn btn-light" onClick={() => setSheet('invite')}><IconPlus size={18} /> Invite family</button>
+          ) : (
+            <button className="btn btn-light" onClick={props.onCheck}>Check a message</button>
+          )}
         </div>
       </section>
 

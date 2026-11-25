@@ -139,8 +139,16 @@ button:disabled { cursor: not-allowed; opacity: 0.5; }
 .o1 { left: 8%; top: 8%; } .o2 { right: 8%; top: 4%; animation-delay: -1s; } .o3 { left: 16%; bottom: 0; animation-delay: -2s; } .o4 { right: 14%; bottom: 4%; animation-delay: -3s; }
 @keyframes float { 50% { transform: translateY(-6px); } }
 
+/* solo / empty family */
+.solo { display: flex; gap: 1rem; align-items: center; position: relative; z-index: 1; }
+.solo .avatar { box-shadow: 0 0 0 4px rgb(255 255 255 / 35%); }
+.btn-glass { background: rgb(255 255 255 / 16%); color: #fff; border: 1.5px solid rgb(255 255 255 / 40%); }
+.ghost-row .member-name { font-weight: 700; }
+.ghost-avatar { border: 2px dashed var(--brand-100); background: var(--brand-50); color: var(--brand); }
+@media (max-width: 480px) { .solo { flex-direction: column; text-align: center; } .status-bottom { flex-wrap: wrap; } .status-bottom .btn { flex: 1; } }
+
 /* buttons */
-.btn { display: inline-flex; align-items: center; justify-content: center; gap: 0.45rem; border-radius: 14px; padding: 0.75rem 1.15rem; font-weight: 800; border: 0; transition: transform 0.08s ease, background 0.15s ease; text-decoration: none; }
+.btn { display: inline-flex; align-items: center; justify-content: center; gap: 0.45rem; white-space: nowrap; border-radius: 14px; padding: 0.75rem 1.15rem; font-weight: 800; border: 0; transition: transform 0.08s ease, background 0.15s ease; text-decoration: none; }
 .btn:active:not(:disabled) { transform: scale(0.98); }
 .btn-primary { background: var(--grad); color: #fff; box-shadow: 0 8px 20px -8px rgb(84 50 240 / 60%); }
 .btn-soft { background: var(--brand-50); color: var(--brand-700); }

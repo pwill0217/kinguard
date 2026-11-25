@@ -5,7 +5,7 @@ About 15 minutes. Everything here works on the free Spark plan with the default 
 ## 1. Create the project and web app
 
 1. Go to the [Firebase console](https://console.firebase.google.com) and create a project (Google Analytics is optional).
-2. **Project settings → Your apps → Web (`</>`)**: register an app named `Kinguard`. Copy the config values into `web/.env` (see `web/.env.example`).
+2. **Project settings → Your apps → Web (`</>`)**: register an app named `Kinguard`. Copy the config values into `web/.env` (see `web/.env.example`). Set `VITE_FIREBASE_AUTH_DOMAIN` to your **Hosting domain** (`<project>.web.app`), not `firebaseapp.com`, so Google sign-in is same-site (Chrome partitions third-party storage). Then add `https://<project>.web.app/__/auth/handler` to **Authorized redirect URIs** on the "Web client (auto created by Google Service)" in Google Cloud → APIs & Services → Credentials.
 
 ## 2. Firebase AI Logic
 
