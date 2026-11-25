@@ -4,7 +4,9 @@
 
 **Tagline:** A private scam checker for older adults and their families: Gemini Nano on-device first, the cloud only for what it can't do, and never your personal details.
 
-**Platform:** Web (Chrome), as a web app plus a Chrome extension, with an installable Android PWA using the cloud path.
+**Platform:** Web (Chrome), as a web app plus a Chrome extension, with an installable Android/iOS PWA that uses the cloud path of the same hybrid model.
+
+**Try it:** https://kinguard-3e9fb.web.app · **Code:** https://github.com/pwill0217/kinguard
 
 ---
 
@@ -14,7 +16,18 @@ Scammers target older adults more than any other group, using texts, emails and 
 
 ## What it does
 
-Paste a message, add a screenshot, share from your phone, or right-click in Chrome. Kinguard answers in plain words: **"This is almost certainly a scam"**, with the warning signs, numbered steps ("Do not call 415-555-0182"), and how to check for yourself. It can read the answer aloud. If the risk is high, it quietly alerts a trusted family member, who sees the warning but never the message.
+Kinguard is a family-safety app for scams.
+
+**Check anything.** Paste a message, add a screenshot, share from your phone, or right-click in Chrome. Kinguard answers in plain words: **"This is almost certainly a scam"**, with the warning signs, numbered steps ("Do not call 415-555-0182"), and how to check for yourself. **Read this to me** speaks the answer in a natural voice from **Kokoro-82M, running on the device**.
+
+**Look out for each other.** Sign in with Google and create a family circle (up to 8 people).
+- Invite *someone to protect* (a parent or grandparent) or *a helper* (a sibling) with a code that expires in 48 hours.
+- See everyone's avatar and live status ("All clear · 2h ago", "Caught a likely scam · 12m ago").
+- When a protected member checks a likely scam, the circle gets an instant alert, and a helper taps **I'll call**.
+- The family sees the warning, never the message.
+- Owners and admins manage roles, remove members and cancel invites. All of it is enforced by Firestore security rules.
+
+Checking a message never requires an account.
 
 ## How we used Firebase AI Logic (hybrid inference)
 
@@ -29,7 +42,13 @@ Every model uses structured output, with one `Schema` serving as both `responseS
 
 The hybrid split is the product, not a fallback: the device does the private, high-volume, offline work, and the cloud does the hard reasoning on data it can't misuse.
 
-Also used: **App Check** (reCAPTCHA Enterprise, plus a debug provider for development), **Remote Config** (routing thresholds and model choice), **Anonymous Auth** and **Cloud Firestore** (family circle with offline persistence and security rules that only allow redacted verdicts).
+Also used:
+- **App Check:** reCAPTCHA Enterprise.
+- **Remote Config:** routing thresholds, plus the deep-check model and a fallback model, used automatically when the primary model is overloaded.
+- **Authentication:** Google sign-in on the app's own domain, so it keeps working with Chrome's third-party storage partitioning. An anonymous session is upgraded in place.
+- **Cloud Firestore:** circles, members, expiring invites and real-time alerts, with offline persistence. Security rules enforce the 8-person cap, roles, invite validity, and alerts that contain only the redacted verdict.
+
+**On-device beyond Gemini:** Kokoro-82M text-to-speech runs in a Web Worker (WASM), so even reading results aloud never sends the text anywhere.
 
 ## Value proposition
 
@@ -39,13 +58,15 @@ Also used: **App Check** (reCAPTCHA Enterprise, plus a debug provider for develo
 
 ## How we built it
 
-React + TypeScript + Vite, the Firebase JS SDK (`firebase/ai` with `InferenceMode`), a service worker for offline use and an Android share target, a Manifest V3 Chrome extension, and 21 unit tests. The tests include privacy guarantees, for example "no raw phone number or name ever reaches a non-device model".
+React + TypeScript + Vite, the Firebase JS SDK (`firebase/ai` with `InferenceMode`), kokoro-js in a Web Worker, a service worker for offline use and an Android share target, a Manifest V3 Chrome extension, and 21 unit tests. The tests include privacy guarantees, for example "no raw phone number or name ever reaches a non-device model".
 
 ## Challenges
 
 - Gemini Nano is single-turn with a token cap, so every prompt is a single self-contained message, and long inputs are capped by a Remote Config value.
 - Small models sometimes disagree with themselves (for example "safe" with a risk of 90), so outputs are normalized for consistency.
 - Designing redaction that removes personal data but keeps scam signals: brands, amounts and link domains stay; query strings, codes and names go.
+- Chrome's storage partitioning broke Google sign-in through the default `firebaseapp.com` handler. We moved the auth domain onto the Hosting domain to make sign-in same-site.
+- Cloud models can be overloaded during demos, so the deep check retries and then falls back to a second model set in Remote Config.
 
 ## What's next
 
