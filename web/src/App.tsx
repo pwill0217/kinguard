@@ -1,35 +1,27 @@
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { chromeDeviceStatus, FirebaseEngine, type DeviceStatus, type Engine } from './ai/engine';
 import { MockEngine } from './ai/mockEngine';
 import { completeDeepCheck, NeedsImageConsentError, runCheck, type Stage } from './ai/pipeline';
 import type { CheckResult } from './ai/types';
 import { DEFAULT_POLICY, loadPolicy, type RoutingPolicy } from './config';
-import {
-  acknowledge,
-  createCircle,
-  ensureUser,
-  joinCircle,
-  loadMembership,
-  saveMembership,
-  sendAlert,
-  watchAlerts,
-  type FamilyAlert,
-  type Membership,
-} from './family/circle';
+import { signInWithGoogle, signOut, watchUser, type Me } from './family/account';
+import * as fam from './family/circles';
+import type { Circle, FamilyAlert, Invite, Member } from './family/circles';
 import { getFirebase, isFirebaseConfigured, type FirebaseServices } from './firebase';
 import { clearHistory, loadHistory, saveToHistory } from './local/history';
-import { AboutView } from './ui/AboutView';
-import { DevicePill, Logo } from './ui/bits';
+import { Avatar, DevicePill, Logo, Sheet } from './ui/bits';
 import { CheckView, type CheckRequest } from './ui/CheckView';
-import { FamilyView } from './ui/FamilyView';
+import { CircleHub, JoinSheet, NoCircle, SignInCard, CreateCircleSheet, type CircleActions } from './ui/CircleView';
 import { HistoryView } from './ui/HistoryView';
+import { IconChevronDown, IconClock, IconHome, IconPlus, IconSettings, IconShield, IconUsers } from './ui/icons';
 import { ResultView } from './ui/ResultView';
+import { SettingsView } from './ui/SettingsView';
+import { mockFamily } from './ui/mockFamily';
 
-type Tab = 'check' | 'result' | 'family' | 'history' | 'about';
+type Tab = 'home' | 'check' | 'result' | 'activity' | 'settings';
 
 const USE_MOCK = import.meta.env.VITE_MOCK_ENGINE === '1';
 
-/** Used when Firebase isn't configured: on-device status is real, AI calls fail and the pipeline falls back to rules. */
 class UnconfiguredEngine implements Engine {
   deviceStatus = chromeDeviceStatus;
   async prepareDevice() {}
@@ -57,6 +49,11 @@ function useOnline() {
   return online;
 }
 
+function joinCodeFromUrl(): string | null {
+  const m = location.pathname.match(/^\/join\/([A-Za-z0-9]{6})\/?$/);
+  return m ? fam.normalizeCode(m[1]) : null;
+}
+
 export default function App() {
   const online = useOnline();
   const [services] = useState<FirebaseServices | null>(() => {
@@ -73,7 +70,7 @@ export default function App() {
   const [device, setDevice] = useState<DeviceStatus>('unavailable');
   const [progress, setProgress] = useState<number | null>(null);
 
-  const [tab, setTab] = useState<Tab>('check');
+  const [tab, setTab] = useState<Tab>(() => (joinCodeFromUrl() ? 'home' : 'home'));
   const [text, setText] = useState('');
   const [stage, setStage] = useState<Stage | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -82,14 +79,23 @@ export default function App() {
   const [history, setHistory] = useState<CheckResult[]>(loadHistory);
   const [largeText, setLargeText] = useState(() => localStorage.getItem('kinguard.large') === '1');
 
-  const [uid, setUid] = useState<string | null>(null);
-  const [membership, setMembership] = useState<Membership | null>(loadMembership);
-  const [alerts, setAlerts] = useState<FamilyAlert[]>([]);
-  const [familyBusy, setFamilyBusy] = useState(false);
-  const [familyError, setFamilyError] = useState<string | null>(null);
+  // Family state
+  const [me, setMe] = useState<Me | null>(USE_MOCK ? mockFamily.me : null);
+  const [authReady, setAuthReady] = useState(USE_MOCK || !services);
+  const [circles, setCircles] = useState<Circle[]>(USE_MOCK ? mockFamily.circles : []);
+  const [circleId, setCircleId] = useState<string | null>(() => localStorage.getItem('kinguard.circle'));
+  const [members, setMembers] = useState<Member[]>(USE_MOCK ? mockFamily.members : []);
+  const [alerts, setAlerts] = useState<FamilyAlert[]>(USE_MOCK ? mockFamily.alerts : []);
+  const [invites, setInvites] = useState<Invite[]>(USE_MOCK ? mockFamily.invites : []);
   const [alerted, setAlerted] = useState<Record<string, 'sending' | 'sent'>>({});
+  const [switcher, setSwitcher] = useState(false);
+  const [joinCode, setJoinCode] = useState<string | null>(joinCodeFromUrl);
+  const [createOpen, setCreateOpen] = useState(false);
+  const [familyError, setFamilyError] = useState<string | null>(null);
 
-  // Load routing policy from Remote Config, then build the Firebase AI Logic engine.
+  const circle = useMemo(() => circles.find((c) => c.id === circleId) ?? circles[0] ?? null, [circles, circleId]);
+
+  // ---------- AI engine ----------
   useEffect(() => {
     if (!services) return;
     let cancelled = false;
@@ -106,12 +112,11 @@ export default function App() {
   const refreshDevice = useCallback(async () => setDevice(await engineRef.current.deviceStatus()), []);
   useEffect(() => {
     void refreshDevice();
-    const t = setInterval(refreshDevice, 15_000);
+    const t = setInterval(refreshDevice, 20_000);
     return () => clearInterval(t);
   }, [refreshDevice]);
 
   const setupDevice = useCallback(async () => {
-    // Called from a click: Chrome requires a user gesture to start the model download.
     setProgress(0);
     try {
       await engineRef.current.prepareDevice((p) => setProgress(p));
@@ -123,37 +128,122 @@ export default function App() {
     }
   }, [refreshDevice]);
 
-  // Sign in anonymously for the family circle.
+  // ---------- auth + live family data ----------
   useEffect(() => {
     if (!services) return;
-    ensureUser(services.auth).then(setUid).catch((e) => console.warn('Auth unavailable', e));
+    return watchUser(services.auth, (u) => {
+      setMe(u);
+      setAuthReady(true);
+    });
   }, [services]);
 
   useEffect(() => {
-    if (!services || !membership || !uid) return;
-    return watchAlerts(services.db, membership.code, setAlerts, (e) => setFamilyError(e.message));
-  }, [services, membership, uid]);
+    if (!services || !me) {
+      if (!USE_MOCK) setCircles([]);
+      return;
+    }
+    return fam.watchMyCircles(services.db, me.uid, setCircles, (e) => setFamilyError(e.message));
+  }, [services, me]);
+
+  useEffect(() => {
+    if (!services || !circle) {
+      if (!USE_MOCK) {
+        setMembers([]);
+        setAlerts([]);
+        setInvites([]);
+      }
+      return;
+    }
+    const err = (e: Error) => console.warn(e);
+    const u1 = fam.watchMembers(services.db, circle.id, setMembers, err);
+    const u2 = fam.watchAlerts(services.db, circle.id, setAlerts, err);
+    const u3 = fam.watchInvites(services.db, circle.id, setInvites, () => setInvites([]));
+    return () => {
+      u1();
+      u2();
+      u3();
+    };
+  }, [services, circle?.id]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  useEffect(() => {
+    if (circle) localStorage.setItem('kinguard.circle', circle.id);
+  }, [circle]);
+
+  const doSignIn = useCallback(async () => {
+    if (!services) throw new Error('Sign-in is not available in this build.');
+    await signInWithGoogle(services.auth, services.db);
+  }, [services]);
+
+  const need = () => {
+    if (!services || !me) throw new Error('Please sign in first.');
+    return { db: services.db, me };
+  };
+
+  const act: CircleActions = {
+    signIn: doSignIn,
+    createCircle: async (name, prot) => {
+      const { db, me } = need();
+      const id = await fam.createCircle(db, me, name, prot);
+      setCircleId(id);
+    },
+    previewInvite: async (code) => fam.previewInvite(need().db, code),
+    joinCircle: async (inv) => {
+      const { db, me } = need();
+      await fam.joinWithInvite(db, me, inv);
+      setCircleId(inv.circleId);
+      setJoinCode(null);
+      if (location.pathname.startsWith('/join/')) window.history.replaceState(null, '', '/');
+    },
+    createInvite: async (asProtected) => {
+      const { db, me } = need();
+      return fam.createInvite(db, me, circle!, asProtected);
+    },
+    revokeInvite: async (code) => fam.revokeInvite(need().db, code),
+    removeMember: async (uid) => {
+      await fam.removeMember(need().db, circle!.id, uid);
+    },
+    setRole: async (uid, role) => fam.setRole(need().db, circle!.id, uid, role),
+    setProtected: async (uid, v) => fam.setProtected(need().db, circle!.id, uid, v),
+    renameCircle: async (name) => fam.renameCircle(need().db, circle!.id, name),
+    deleteCircle: async () => {
+      await fam.deleteCircle(need().db, circle!);
+      setCircleId(null);
+    },
+    acknowledge: async (id) => {
+      const { db, me } = need();
+      await fam.acknowledge(db, me, circle!.id, id);
+    },
+  };
+
+  // ---------- checking ----------
+  const shareWithFamily = useCallback(
+    async (r: CheckResult, p: RoutingPolicy, force = false) => {
+      if (!services || !me || !circles.length) return;
+      const protectedIn = await fam.circlesWhereProtected(services.db, me.uid, circles);
+      if (!protectedIn.length) return;
+      const inCircles = circles.filter((c) => protectedIn.includes(c.id));
+      await fam.recordMyCheck(services.db, me, inCircles, r.final.verdict);
+      if ((force || r.final.riskScore >= p.familyAlertThreshold) && !alerted[r.id]) {
+        setAlerted((a) => ({ ...a, [r.id]: 'sending' }));
+        try {
+          await fam.sendAlert(services.db, me, protectedIn, r);
+          setAlerted((a) => ({ ...a, [r.id]: 'sent' }));
+        } catch (e) {
+          console.warn('Family alert failed', e);
+          setAlerted(({ [r.id]: _drop, ...rest }) => rest);
+        }
+      }
+    },
+    [services, me, circles, alerted],
+  );
 
   const finishResult = useCallback(
     async (r: CheckResult, p: RoutingPolicy) => {
       setResult(r);
       setHistory(saveToHistory(r));
-      // Auto-alert family for high-risk results.
-      if (services && uid && membership?.role === 'protected' && membership.autoAlert && r.final.riskScore >= p.familyAlertThreshold && !alerted[r.id]) {
-        setAlerted((a) => ({ ...a, [r.id]: 'sending' }));
-        try {
-          await sendAlert(services.db, uid, membership, r);
-          setAlerted((a) => ({ ...a, [r.id]: 'sent' }));
-        } catch (e) {
-          console.warn('Family alert failed', e);
-          setAlerted((a) => {
-            const { [r.id]: _drop, ...rest } = a;
-            return rest;
-          });
-        }
-      }
+      void shareWithFamily(r, p);
     },
-    [services, uid, membership, alerted],
+    [shareWithFamily],
   );
 
   const check = useCallback(
@@ -167,12 +257,10 @@ export default function App() {
         window.scrollTo({ top: 0 });
       } catch (e) {
         if (e instanceof NeedsImageConsentError) {
-          const ok = window.confirm(
-            'This device cannot read screenshots privately.\n\nSend the screenshot to Google\'s secure cloud to read it? Everything else stays private.',
-          );
+          const ok = window.confirm("This device can't read screenshots privately.\n\nSend the screenshot to Google's secure cloud to read it? Everything else stays private.");
           setStage(null);
           if (ok) return check(req, true);
-          setError('OK, the screenshot was not sent. You can type or paste the message instead.');
+          setError('OK, the screenshot was not sent. You can paste the message text instead.');
         } else {
           setError((e as Error).message || 'Something went wrong. Please try again.');
         }
@@ -196,7 +284,6 @@ export default function App() {
     }
   }, [result, policy, finishResult]);
 
-  // Back online: finish any deep check that was postponed.
   useEffect(() => {
     if (online && result?.deepPending === 'offline' && !deepBusy) void deepCheck();
   }, [online, result, deepBusy, deepCheck]);
@@ -217,6 +304,7 @@ export default function App() {
       const res = await cache.match('/__shared');
       if (res) {
         setText(await res.text());
+        setTab('check');
         await cache.delete('/__shared');
       }
       window.history.replaceState(null, '', location.pathname);
@@ -229,59 +317,60 @@ export default function App() {
     localStorage.setItem('kinguard.large', largeText ? '1' : '0');
   }, [largeText]);
 
-  async function familyAction(fn: () => Promise<void>) {
-    setFamilyBusy(true);
-    setFamilyError(null);
-    try {
-      await fn();
-    } catch (e) {
-      setFamilyError((e as Error).message);
-    } finally {
-      setFamilyBusy(false);
-    }
-  }
-
   const familyState: 'none' | 'available' | 'sent' | 'sending' =
-    !result || !membership || membership.role !== 'protected' || !uid
-      ? 'none'
-      : alerted[result.id] ?? (result.final.verdict === 'safe' ? 'none' : 'available');
+    !result || !me || !circles.length ? 'none' : alerted[result.id] ?? (result.final.verdict === 'safe' ? 'none' : 'available');
 
-  const nav: { id: Tab; label: string }[] = [
-    { id: 'check', label: 'Check' },
-    { id: 'family', label: 'Family' },
-    { id: 'history', label: 'History' },
-    { id: 'about', label: 'About' },
-  ];
+  const unread = me ? alerts.filter((a) => a.fromUid !== me.uid && a.verdict !== 'safe' && a.ackBy.length === 0 && (a.createdAt?.getTime() ?? Date.now()) > Date.now() - 7 * 86400_000).length : 0;
+
+  const goCheck = () => {
+    setTab('check');
+    window.scrollTo({ top: 0 });
+  };
 
   return (
-    <div className="app">
-      <header className="top">
-        <button className="brand" onClick={() => setTab('check')} aria-label="Kinguard home">
-          <Logo />
-          <span>Kinguard</span>
-        </button>
-        <div className="row gap-sm wrap end">
-          <DevicePill status={device} progress={progress} onSetup={setupDevice} />
-          <button className="pill pill-plain" aria-pressed={largeText} onClick={() => setLargeText((v) => !v)}>
-            {largeText ? 'A−' : 'A+'} <span className="sr-only">Toggle larger text</span>
+    <div className="shell">
+      <header className="topbar">
+        {me && circle ? (
+          <button className="circle-switch" onClick={() => setSwitcher(true)}>
+            <span className="cs-icon"><IconUsers size={16} /></span>
+            <span className="cs-name">{circle.name}</span>
+            <IconChevronDown size={16} />
           </button>
+        ) : (
+          <button className="brand" onClick={() => setTab('home')}><Logo size={30} /><span>Kinguard</span></button>
+        )}
+        <div className="topbar-right">
+          <DevicePill status={device} progress={progress} onSetup={setupDevice} />
+          {me && (
+            <button className="avatar-btn" onClick={() => setTab('settings')} aria-label="Account and settings">
+              <Avatar name={me.name} photoURL={me.photoURL} seed={me.uid} size={34} />
+            </button>
+          )}
         </div>
       </header>
-      <nav className="tabs" aria-label="Main">
-        {nav.map((n) => (
-          <button key={n.id} className={tab === n.id || (n.id === 'check' && tab === 'result') ? 'active' : ''} onClick={() => setTab(n.id === 'check' && result && tab === 'result' ? 'check' : n.id)}>
-            {n.label}
-            {n.id === 'family' && alerts.some((a) => uid && a.fromUid !== uid && !a.ackBy.includes(uid)) && <span className="badge" aria-label="new warnings" />}
-          </button>
-        ))}
-      </nav>
 
       {!online && <div className="banner">You're offline. Kinguard can still check messages privately on this device.</div>}
-      {!services && !USE_MOCK && (
-        <div className="banner warn">Setup needed: this build has no Firebase project configured, so only the built-in rules are active.</div>
-      )}
+      {!services && !USE_MOCK && <div className="banner warn">Setup needed: no Firebase project configured, so only the built-in rules are active.</div>}
 
-      <main>
+      <main className="content">
+        {tab === 'home' &&
+          (!authReady ? (
+            <div className="card skeleton" />
+          ) : !me ? (
+            <>
+              <SignInCard onSignIn={doSignIn} available={!!services} />
+              {joinCode && <p className="banner">Sign in to join the circle you were invited to (code {joinCode}).</p>}
+              <button className="quick-check" onClick={goCheck}>
+                <span className="qc-icon"><IconShield /></span>
+                <span className="grow"><strong>Just check a message</strong><span className="muted small">No account needed</span></span>
+              </button>
+            </>
+          ) : !circle ? (
+            <NoCircle me={me} act={act} initialCode={joinCode} />
+          ) : (
+            <CircleHub me={me} circle={circle} members={members} alerts={alerts} invites={invites} act={act} onCheck={goCheck} />
+          ))}
+        {familyError && tab === 'home' && <p className="error">{familyError}</p>}
         {tab === 'check' && <CheckView text={text} setText={setText} busy={stage} error={error} onCheck={(r) => void check(r)} />}
         {tab === 'result' && result && (
           <ResultView
@@ -290,66 +379,14 @@ export default function App() {
             deepBusy={deepBusy}
             familyState={familyState}
             onDeepCheck={() => void deepCheck()}
-            onAlertFamily={async () => {
-              if (!services || !uid || !membership) return;
-              setAlerted((a) => ({ ...a, [result.id]: 'sending' }));
-              try {
-                await sendAlert(services.db, uid, membership, result);
-                setAlerted((a) => ({ ...a, [result.id]: 'sent' }));
-              } catch (e) {
-                setError((e as Error).message);
-                setAlerted(({ [result.id]: _drop, ...rest }) => rest);
-              }
-            }}
+            onAlertFamily={() => void shareWithFamily(result, policy, true)}
             onAgain={() => {
               setText('');
-              setTab('check');
+              goCheck();
             }}
           />
         )}
-        {tab === 'family' && (
-          <FamilyView
-            available={!!services}
-            membership={membership}
-            alerts={alerts}
-            uid={uid}
-            error={familyError}
-            busy={familyBusy}
-            onCreate={(name) =>
-              familyAction(async () => {
-                const id = uid ?? (await ensureUser(services!.auth));
-                setUid(id);
-                const code = await createCircle(services!.db, id);
-                const m: Membership = { code, myName: name, role: 'protected', autoAlert: true };
-                saveMembership(m);
-                setMembership(m);
-              })
-            }
-            onJoin={(name, code) =>
-              familyAction(async () => {
-                const id = uid ?? (await ensureUser(services!.auth));
-                setUid(id);
-                await joinCircle(services!.db, id, code);
-                const m: Membership = { code, myName: name, role: 'helper', autoAlert: false };
-                saveMembership(m);
-                setMembership(m);
-              })
-            }
-            onAck={(a) => familyAction(() => acknowledge(services!.db, uid!, membership!.myName, membership!.code, a.id))}
-            onToggleAuto={(on) => {
-              const m = { ...membership!, autoAlert: on };
-              saveMembership(m);
-              setMembership(m);
-            }}
-            onLeave={() => {
-              if (!window.confirm('Leave this circle on this device? You can rejoin with the code.')) return;
-              saveMembership(null);
-              setMembership(null);
-              setAlerts([]);
-            }}
-          />
-        )}
-        {tab === 'history' && (
+        {tab === 'activity' && (
           <HistoryView
             items={history}
             onOpen={(r) => {
@@ -363,11 +400,60 @@ export default function App() {
             }}
           />
         )}
-        {tab === 'about' && <AboutView policy={policy} device={device} />}
+        {tab === 'settings' && (
+          <SettingsView
+            me={me}
+            authAvailable={!!services}
+            onSignIn={() => void doSignIn().catch((e) => setError(e.message))}
+            onSignOut={() => services && void signOut(services.auth)}
+            device={device}
+            onSetupDevice={setupDevice}
+            largeText={largeText}
+            setLargeText={setLargeText}
+            policy={policy}
+          />
+        )}
+        <p className="disclaimer">Kinguard gives guidance, not guarantees. When in doubt, hang up and call someone you trust.</p>
       </main>
-      <footer className="foot muted">
-        Kinguard gives guidance, not guarantees. When in doubt, hang up and call someone you trust.
-      </footer>
+
+      <nav className="bottomnav" aria-label="Main">
+        <button className={tab === 'home' ? 'on' : ''} onClick={() => setTab('home')}>
+          <span className="nav-ico"><IconHome />{unread > 0 && <span className="dot-badge">{unread}</span>}</span>
+          <span>{me && circle ? 'Circle' : 'Home'}</span>
+        </button>
+        <button className={`nav-check ${tab === 'check' || tab === 'result' ? 'on' : ''}`} onClick={goCheck} aria-label="Check a message">
+          <span className="nav-fab"><IconShield size={28} /></span>
+          <span>Check</span>
+        </button>
+        <button className={tab === 'activity' ? 'on' : ''} onClick={() => setTab('activity')}>
+          <span className="nav-ico"><IconClock /></span>
+          <span>Activity</span>
+        </button>
+        <button className={tab === 'settings' ? 'on' : ''} onClick={() => setTab('settings')}>
+          <span className="nav-ico"><IconSettings /></span>
+          <span>Settings</span>
+        </button>
+      </nav>
+
+      <Sheet open={switcher} title="Your circles" onClose={() => setSwitcher(false)}>
+        <ul className="circle-list">
+          {circles.map((c) => (
+            <li key={c.id}>
+              <button className={`circle-item ${c.id === circle?.id ? 'on' : ''}`} onClick={() => { setCircleId(c.id); setSwitcher(false); setTab('home'); }}>
+                <span className="cs-icon big"><IconUsers size={20} /></span>
+                <span className="grow"><strong>{c.name}</strong><span className="muted small">{c.memberUids.length} of {fam.MAX_MEMBERS} people</span></span>
+                {c.id === circle?.id && <span className="chip">Current</span>}
+              </button>
+            </li>
+          ))}
+        </ul>
+        <button className="btn btn-soft btn-block" onClick={() => { setSwitcher(false); setCreateOpen(true); }}><IconPlus size={18} /> Create a new circle</button>
+        <button className="btn btn-ghost btn-block" onClick={() => { setSwitcher(false); setJoinCode(''); }}><IconUsers size={18} /> Join with a code</button>
+      </Sheet>
+      {me && circle && joinCode !== null && (
+        <JoinSheet open initialCode={joinCode || null} onClose={() => setJoinCode(null)} act={act} />
+      )}
+      {me && <CreateCircleSheet open={createOpen} me={me} onClose={() => setCreateOpen(false)} act={act} />}
     </div>
   );
 }

@@ -22,7 +22,7 @@ About 15 minutes. Everything here works on the free Spark plan with the default 
 
 ## 4. Authentication
 
-**Build → Authentication → Get started → Sign-in method → Anonymous → Enable.**
+**Build → Authentication → Sign-in method → Google → Enable** (pick a support email). Family circles require a Google account so they persist across devices.
 
 ## 5. Cloud Firestore
 

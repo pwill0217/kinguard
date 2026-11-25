@@ -44,10 +44,17 @@ All four models use **structured output**: the same `Schema` is passed as `respo
 ## Features
 
 - **Check anything:** paste text, add or paste a screenshot, share from Android's share sheet (installable PWA with a share target), or right-click → **Check with Kinguard** in Chrome (extension).
-- **Plain-language verdicts** for older adults: large hyperlegible text, a risk meter, warning signs with reasons, numbered next steps, "how to check for yourself", and **Read this to me** (speech).
+- **Plain-language verdicts** for older adults: large text, a risk meter, warning signs with reasons, numbered next steps, "how to check for yourself".
+- **Read this to me with Kokoro:** the Kokoro-82M text-to-speech model runs **on the device** in a Web Worker (WASM), so results are read aloud in a natural voice and the text never leaves the device for speech either. It is a one-time download of about 90 MB, with four voices and adjustable speed, and falls back to the browser's voice.
 - **Works offline:** with Gemini Nano, checks run with no internet. The expert double-check runs automatically when you reconnect.
 - **Never stuck:** no on-device model goes to the cloud on redacted text, and no model at all falls back to built-in rules.
-- **Family circle** (Firebase Auth + Firestore): share a 6-character code with a trusted helper. High-risk results alert them in real time, and they can tap "I'll call them". Alerts contain only the redacted verdict, enforced by Firestore security rules.
+- **Family circles** (Google sign-in + Firestore), a family-safety hub:
+  - A member list with avatars, roles (owner, admin, member), who is *protected*, and live status ("All clear · 2h ago", "Caught a likely scam · 12m ago").
+  - Invite codes for *someone to protect* or *a helper*. Codes **expire after 48 hours**, can be **cancelled**, and can be shared by link (`/join/CODE`).
+  - **Up to 8 people per circle.** Owners and admins remove members, the owner promotes admins, and anyone can leave. Multiple circles come with a switcher.
+  - High-risk results alert the circle in real time, and helpers tap **I'll call**.
+  - Everything is **enforced server-side by Firestore security rules**: member cap, roles, invite validity, and alerts that can only contain the redacted verdict.
+  - Checking messages never needs an account. Circles need Google sign-in so they persist across devices, and an anonymous session is upgraded in place.
 - **Live-tunable routing** (Remote Config): escalation threshold, family alert threshold, cloud models, and low-confidence escalation, all changeable without shipping a new build.
 - **Local link inspection:** look-alike brand domains (`amaz0n-…`), risky TLDs, shorteners, punycode, bare IPs and insecure links.
 - **History** stays on the device.
@@ -89,7 +96,9 @@ web/src/ai/schemas.ts      shared structured-output schemas (cloud + Nano)
 web/src/local/redact.ts    on-device PII redaction and re-hydration
 web/src/local/links.ts     on-device link inspection
 web/src/local/rules.ts     offline rules fallback
-web/src/family/circle.ts   family circle (Auth + Firestore)
+web/src/family/account.ts  Google sign-in (anonymous upgrade)
+web/src/family/circles.ts  circles, members, invites, alerts (Firestore)
+web/src/voice/             Kokoro on-device TTS (Web Worker)
 web/public/sw.js           offline shell + Android share target
 extension/                 Chrome MV3 extension
 firestore.rules            security rules (alerts can only contain the redacted verdict)
