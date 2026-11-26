@@ -85,6 +85,29 @@ final class AIEngine {
         return try await session.respond(to: prompt, generating: type).content
     }
 
+    /// Cloud call with a hard time limit, so a slow or overloaded model never leaves the UI spinning.
+    private func cloud<T: Generable & Sendable>(_ name: String, _ prompt: String, as type: T.Type, within seconds: Double) async throws -> T {
+        let work = Task { @MainActor in try await self.generate(self.gemini(name), prompt, as: type) }
+        let box = Once()
+        return try await withCheckedThrowingContinuation { (cont: CheckedContinuation<T, Error>) in
+            Task { @MainActor in
+                do {
+                    let value = try await work.value
+                    if box.claim() { cont.resume(returning: value) }
+                } catch {
+                    if box.claim() { cont.resume(throwing: error) }
+                }
+            }
+            Task { @MainActor in
+                try? await Task.sleep(for: .seconds(seconds))
+                if box.claim() {
+                    work.cancel()
+                    cont.resume(throwing: AITimeout(model: name, seconds: Int(seconds)))
+                }
+            }
+        }
+    }
+
     private var onDevice: SystemLanguageModel { SystemLanguageModel.default }
 
     private func gemini(_ name: String) -> some LanguageModel {
@@ -122,7 +145,7 @@ final class AIEngine {
         } else {
             fallbackReason = "On-device AI isn't available here (\(deviceAI.label.lowercased())), so the redacted text was screened in the cloud."
         }
-        let out = try await generate(gemini(policy.hybridCloudModel), prompt, as: TriageOutput.self)
+        let out = try await cloud(policy.hybridCloudModel, prompt, as: TriageOutput.self, within: 20)
         return (Self.triage(from: out), .cloud, fallbackReason)
     }
 
@@ -130,15 +153,25 @@ final class AIEngine {
     /// Retries once on overload, then switches to the Remote Config fallback model.
     func deepCheck(redacted: String, triage: Triage, triageWhere: Where, linkSignals: [String]) async throws -> DeepCheck {
         let prompt = Prompts.deep(redacted, triage: triage, triageWhere: triageWhere, linkSignals: linkSignals)
-        let names = [policy.deepCheckModel, policy.deepCheckModel, policy.deepCheckFallbackModel]
+        // Primary model gets one quick retry on overload; a timeout skips straight to the lighter fallback.
+        let attempts: [(name: String, limit: Double)] = [
+            (policy.deepCheckModel, 25), (policy.deepCheckModel, 20), (policy.deepCheckFallbackModel, 20),
+        ]
         var lastError: Error?
-        for (i, name) in names.enumerated() {
+        var i = 0
+        while i < attempts.count {
+            let a = attempts[i]
             do {
-                return Self.deep(from: try await generate(gemini(name), prompt, as: DeepOutput.self))
+                return Self.deep(from: try await cloud(a.name, prompt, as: DeepOutput.self, within: a.limit))
+            } catch is AITimeout where i < 2 {
+                lastError = AITimeout(model: a.name, seconds: Int(a.limit))
+                i = 2
+                continue
             } catch {
                 lastError = error
                 if i == 0 { try? await Task.sleep(for: .milliseconds(1200)) }
             }
+            i += 1
         }
         throw lastError ?? URLError(.unknown)
     }
@@ -181,5 +214,23 @@ final class AIEngine {
     static func short(_ error: Error) -> String {
         let s = error.localizedDescription
         return s.count > 90 ? String(s.prefix(90)) + "…" : s
+    }
+}
+
+
+struct AITimeout: LocalizedError {
+    let model: String
+    let seconds: Int
+    var errorDescription: String? { "\(model) didn't answer within \(seconds)s" }
+}
+
+/// Lets exactly one of two racing tasks resume a continuation.
+@MainActor
+final class Once {
+    private var done = false
+    func claim() -> Bool {
+        if done { return false }
+        done = true
+        return true
     }
 }
