@@ -6,3 +6,8 @@ dist
 .firebase
 .firebaserc
 *.tsbuildinfo
+
+# iOS
+ios/**/GoogleService-Info.plist
+ios/**/xcuserdata/
+ios/**/DerivedData/
