@@ -2,9 +2,17 @@
 
 **A private scam checker for older adults and the families who look out for them.** Paste a text, email or screenshot and Kinguard tells you, in plain words, whether it's a scam and exactly what to do. Your personal details never leave your device.
 
-Built for **#BuildHybridAI 2026** with **Firebase AI Logic hybrid inference**: Gemini Nano runs on-device in Chrome, and Gemini in the cloud is used only when needed, and only on text that has already had your personal details removed.
+Built for **#BuildHybridAI 2026** with **Firebase AI Logic hybrid inference** on two platforms: **Gemini Nano on-device in Chrome**, and a **native iPhone app** pairing Apple's on-device model with Gemini through Firebase AI Logic. The cloud is used only when needed, and only on text that has already had your personal details removed.
 
-> 🌐 **Live app: https://kinguard-3e9fb.web.app** · 🎬 Demo video: _add YouTube link_ · 🧩 Chrome extension: [`/extension`](extension)
+> 🌐 **Live app: https://kinguard-3e9fb.web.app** · 🎬 Demo video: _add YouTube link_ · 🧩 Chrome extension: [`/extension`](extension) · 📱 iPhone app: [`/ios`](ios)
+
+## How to test it (judges)
+
+1. Open **https://kinguard-3e9fb.web.app** in Chrome. No account is needed to check messages.
+2. Tap a sample scam (for example "Grandson in jail") and press **Check it**. Open **How Kinguard checked this** to see which steps ran on your device and the exact redacted text the cloud received.
+3. On Chrome desktop with Gemini Nano enabled (see below), the pill at the top turns green and the private steps run on-device. Without it, Kinguard falls back to the cloud on redacted text, so it works everywhere.
+4. **Family:** sign in with Google, create a circle, open **Invite** and join from a second Google account (another browser or incognito). Tap **Tell my family** on a result: the other account gets a live alert banner.
+5. **iPhone:** the native app is shown in the demo video. To build it yourself, see [`ios/README.md`](ios/README.md) (needs a Mac with Xcode 27 and your own Firebase project).
 
 ---
 
@@ -52,7 +60,7 @@ All four models use **structured output**: the same `Schema` is passed as `respo
   - A member list with avatars, roles (owner, admin, member), who is *protected*, and live status ("All clear · 2h ago", "Caught a likely scam · 12m ago").
   - Invite codes for *someone to protect* or *a helper*. Codes **expire after 48 hours**, can be **cancelled**, and can be shared by link (`/join/CODE`).
   - **Up to 8 people per circle.** Owners and admins remove members, the owner promotes admins, and anyone can leave. Multiple circles come with a switcher.
-  - High-risk results alert the circle in real time, and helpers tap **I'll call**.
+  - High-risk results from protected members alert the circle automatically, and anyone can tap **Tell my family**. Other members get a live in-app banner (plus a system notification if the app is in the background), and helpers tap **I'll call**.
   - Everything is **enforced server-side by Firestore security rules**: member cap, roles, invite validity, and alerts that can only contain the redacted verdict.
   - Checking messages never needs an account. Circles need Google sign-in so they persist across devices, and an anonymous session is upgraded in place.
 - **Live-tunable routing** (Remote Config): escalation threshold, family alert threshold, cloud models, and low-confidence escalation, all changeable without shipping a new build.
@@ -64,6 +72,7 @@ All four models use **structured output**: the same `Schema` is passed as `respo
 | Platform | What runs where |
 |---|---|
 | **Chrome desktop** (web app + extension) | Full hybrid: Gemini Nano on-device, cloud for escalation |
+| **iPhone** (native SwiftUI app, iOS 27) | Full hybrid: Apple's on-device model (Foundation Models) for redaction and first pass, Gemini via Firebase AI Logic for fallback and the expert check; Vision OCR on-device; same family circles |
 | **Android and other browsers** (installable PWA + share target) | Redaction on-device, AI in the cloud via the same hybrid model's automatic fallback |
 | **Any device, offline** | Built-in rules (and Gemini Nano where available) |
 
@@ -76,7 +85,7 @@ cd web
 cp .env.example .env      # fill in your Firebase web config + App Check key/debug token
 npm install
 npm run dev               # http://localhost:5173
-npm test                  # 21 unit tests, including privacy guarantees
+npm test                  # 22 unit tests, including privacy guarantees
 ```
 
 Full Firebase setup (AI Logic, App Check, Auth, Firestore, Remote Config, Hosting) is in **[docs/SETUP.md](docs/SETUP.md)**.
@@ -101,6 +110,7 @@ web/src/family/circles.ts  circles, members, invites, alerts (Firestore)
 web/src/voice/             Kokoro on-device TTS (Web Worker)
 web/public/sw.js           offline shell + Android share target
 extension/                 Chrome MV3 extension
+ios/Kinguard/              native iPhone app (SwiftUI, Foundation Models + Firebase AI Logic)
 firestore.rules            security rules (alerts can only contain the redacted verdict)
 remoteconfig.template.json routing parameters
 ```

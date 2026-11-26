@@ -2,11 +2,11 @@
 
 **Project name:** Kinguard
 
-**Tagline:** A private scam checker for older adults and their families: Gemini Nano on-device first, the cloud only for what it can't do, and never your personal details.
+**Tagline:** A private scam checker for older adults and their families: on-device AI first, the cloud only for what it can't do, and never your personal details.
 
-**Platform:** Web (Chrome), as a web app plus a Chrome extension, with an installable Android/iOS PWA that uses the cloud path of the same hybrid model.
+**Platforms:** Web (Chrome web app + Chrome extension, installable PWA) and a **native iPhone app** (SwiftUI, iOS 27). Both share one Firebase project, one set of security rules and the same family circles.
 
-**Try it:** https://kinguard-3e9fb.web.app · **Code:** https://github.com/pwill0217/kinguard
+**Try it:** https://kinguard-3e9fb.web.app (open in Chrome; no account needed to check a message) · **Code:** https://github.com/pwill0217/kinguard · The iPhone app is shown in the video; source in `/ios`.
 
 ---
 
@@ -23,7 +23,7 @@ Kinguard is a family-safety app for scams.
 **Look out for each other.** Sign in with Google and create a family circle (up to 8 people).
 - Invite *someone to protect* (a parent or grandparent) or *a helper* (a sibling) with a code that expires in 48 hours.
 - See everyone's avatar and live status ("All clear · 2h ago", "Caught a likely scam · 12m ago").
-- When a protected member checks a likely scam, the circle gets an instant alert, and a helper taps **I'll call**.
+- When a protected member checks a likely scam, the circle gets an instant alert, and anyone can tap **Tell my family** on a result. Everyone else sees a live banner on web and iPhone, and a helper taps **I'll call**.
 - The family sees the warning, never the message.
 - Owners and admins manage roles, remove members and cancel invites. All of it is enforced by Firestore security rules.
 
@@ -50,6 +50,16 @@ Also used:
 
 **On-device beyond Gemini:** Kokoro-82M text-to-speech runs in a Web Worker (WASM), so even reading results aloud never sends the text anywhere.
 
+## Native iPhone app: the same hybrid idea with Apple's on-device model
+
+On iOS 27, Firebase AI Logic's `GeminiLanguageModel` conforms to Apple's `LanguageModel` protocol, so the iPhone app runs every step through one `LanguageModelSession` code path and the same `@Generable` output types. Only the model changes:
+
+- **Screenshots:** Apple Vision OCR, on the phone.
+- **Finding names and addresses:** Apple's on-device model **only**. No cloud fallback, because it sees raw text.
+- **First-pass screen:** Apple's on-device model, falling back to `gemini-3.5-flash-lite` through Firebase AI Logic when Apple Intelligence isn't available. The app says when and why it fell back.
+- **Expert double-check:** `gemini-3.8-flash` via Firebase AI Logic, on redacted text, with a hard time limit and an automatic switch to the Remote Config fallback model.
+- **App Check** (App Attest / debug provider), **Remote Config**, **Google sign-in** and **Firestore** circles are shared with the web app, so a family can mix iPhones and browsers.
+
 ## Value proposition
 
 - **For older adults:** a calm, large-print second opinion in seconds that never asks them to give up private details.
@@ -58,7 +68,7 @@ Also used:
 
 ## How we built it
 
-React + TypeScript + Vite, the Firebase JS SDK (`firebase/ai` with `InferenceMode`), kokoro-js in a Web Worker, a service worker for offline use and an Android share target, a Manifest V3 Chrome extension, and 21 unit tests. The tests include privacy guarantees, for example "no raw phone number or name ever reaches a non-device model".
+Web: React + TypeScript + Vite, the Firebase JS SDK (`firebase/ai` with `InferenceMode`), kokoro-js in a Web Worker, a service worker for offline use and an Android share target, a Manifest V3 Chrome extension, and 22 unit tests. iPhone: SwiftUI, Foundation Models, Firebase iOS SDK 13.2 (FirebaseAILogic, App Check, Auth, Firestore, Remote Config), Vision and GoogleSignIn. The tests include privacy guarantees, for example "no raw phone number or name ever reaches a non-device model".
 
 ## Challenges
 
@@ -66,11 +76,12 @@ React + TypeScript + Vite, the Firebase JS SDK (`firebase/ai` with `InferenceMod
 - Small models sometimes disagree with themselves (for example "safe" with a risk of 90), so outputs are normalized for consistency.
 - Designing redaction that removes personal data but keeps scam signals: brands, amounts and link domains stay; query strings, codes and names go.
 - Chrome's storage partitioning broke Google sign-in through the default `firebaseapp.com` handler. We moved the auth domain onto the Hosting domain to make sign-in same-site.
-- Cloud models can be overloaded during demos, so the deep check retries and then falls back to a second model set in Remote Config.
+- Cloud models can be overloaded during demos, so the deep check retries and then falls back to a second model set in Remote Config. On iPhone every cloud call also has a hard time limit, so the on-device verdict is never stuck behind a slow server.
+- Keeping one family system across two platforms: both apps share Firestore rules, and live alerts are detected client-side so the free Spark plan is enough.
 
 ## What's next
 
-Gmail and Messages integrations, more languages (the on-device model supports more), and a caregiver weekly digest.
+Push notifications when the app is closed (APNs + Cloud Functions), a TestFlight/App Store release, Gmail and Messages integrations, more languages, and a caregiver weekly digest.
 
 ## Built during the submission period
 

@@ -17,8 +17,8 @@ both plug into Foundation Models' `LanguageModelSession`, so every step uses the
 Xcode 27+, iOS 27 Simulator or device with Apple Intelligence (the Simulator uses the Mac's Apple Intelligence; Mac and Simulator versions should match).
 
 ## Setup
-1. Firebase console → Project settings → Add app → iOS, bundle ID `com.kinguard.app`. Download `GoogleService-Info.plist`.
-2. Xcode → New Project → iOS App, name `Kinguard`, org `com.kinguard`, SwiftUI. Delete the generated `ContentView.swift` and `KinguardApp.swift`, then copy this folder's `Kinguard/` contents into the app folder.
+1. Firebase console → Project settings → Add app → iOS, a bundle ID of your own (for example `com.yourname.kinguard`; it must be unique on Apple's side). Download `GoogleService-Info.plist`.
+2. Xcode → New Project → iOS App, name `Kinguard`, the same bundle ID, SwiftUI. Delete the generated `ContentView.swift` and `KinguardApp.swift`, then copy this folder's `Kinguard/` contents into the app folder.
 3. Add packages: `firebase-ios-sdk` ≥ 13.2.0 (FirebaseAILogic, FirebaseAppCheck, FirebaseAuth, FirebaseFirestore, FirebaseRemoteConfig) and `GoogleSignIn-iOS` (GoogleSignIn, GoogleSignInSwift).
 4. Target → General → Minimum Deployments: iOS 27.0. Build Settings → **Default Actor Isolation: nonisolated**.
 5. Target → Info → URL Types → add the `REVERSED_CLIENT_ID` from `GoogleService-Info.plist` as a URL scheme.
