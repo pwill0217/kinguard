@@ -94,6 +94,12 @@ export default function App() {
   const [familyError, setFamilyError] = useState<string | null>(null);
   const [inviteAfterCreate, setInviteAfterCreate] = useState(false);
 
+  const [incoming, setIncoming] = useState<FamilyAlert | null>(null);
+  const seenAlerts = useRef<{ circle: string | null; ids: Set<string> | null }>({ circle: null, ids: null });
+
+  // "Family told" belongs to whoever sent it.
+  useEffect(() => setAlerted({}), [me?.uid]);
+
   const circle = useMemo(() => circles.find((c) => c.id === circleId) ?? circles[0] ?? null, [circles, circleId]);
 
   // ---------- AI engine ----------
@@ -157,14 +163,45 @@ export default function App() {
     }
     const err = (e: Error) => console.warn(e);
     const u1 = fam.watchMembers(services.db, circle.id, setMembers, err);
-    const u2 = fam.watchAlerts(services.db, circle.id, setAlerts, err);
+    seenAlerts.current = { circle: circle.id, ids: null };
+    const u2 = fam.watchAlerts(
+      services.db,
+      circle.id,
+      (list) => {
+        setAlerts(list);
+        const seen = seenAlerts.current;
+        const ids = new Set(list.map((a) => a.id));
+        if (seen.ids) {
+          const fresh = list.find((a) => !seen.ids!.has(a.id) && a.fromUid !== me?.uid);
+          if (fresh) announceAlert(fresh, circle.name);
+        }
+        seen.ids = new Set([...(seen.ids ?? []), ...ids]);
+      },
+      err,
+    );
     const u3 = fam.watchInvites(services.db, circle.id, setInvites, () => setInvites([]));
     return () => {
       u1();
       u2();
       u3();
     };
-  }, [services, circle?.id]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [services, circle?.id, me?.uid]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  function announceAlert(a: FamilyAlert, circleName: string) {
+    setIncoming(a);
+    navigator.vibrate?.(200);
+    if ('Notification' in window && Notification.permission === 'granted' && document.visibilityState !== 'visible') {
+      new Notification(`${a.fromName} may have received a scam`, { body: `${a.headline} · risk ${a.riskScore} · ${circleName}`, tag: a.id });
+    }
+  }
+  useEffect(() => {
+    if (!incoming) return;
+    const t = setTimeout(() => setIncoming(null), 8000);
+    return () => clearTimeout(t);
+  }, [incoming]);
+  useEffect(() => {
+    if (me && 'Notification' in window && Notification.permission === 'default') void Notification.requestPermission();
+  }, [me]);
 
   useEffect(() => {
     if (circle) localStorage.setItem('kinguard.circle', circle.id);
@@ -222,18 +259,19 @@ export default function App() {
     async (r: CheckResult, p: RoutingPolicy, force = false) => {
       if (!services || !me || !circles.length) return;
       const protectedIn = await fam.circlesWhereProtected(services.db, me.uid, circles);
-      if (!protectedIn.length) return;
       const inCircles = circles.filter((c) => protectedIn.includes(c.id));
-      await fam.recordMyCheck(services.db, me, inCircles, r.final.verdict);
-      if ((force || r.final.riskScore >= p.familyAlertThreshold) && !alerted[r.id]) {
-        setAlerted((a) => ({ ...a, [r.id]: 'sending' }));
-        try {
-          await fam.sendAlert(services.db, me, protectedIn, r);
-          setAlerted((a) => ({ ...a, [r.id]: 'sent' }));
-        } catch (e) {
-          console.warn('Family alert failed', e);
-          setAlerted(({ [r.id]: _drop, ...rest }) => rest);
-        }
+      if (inCircles.length) await fam.recordMyCheck(services.db, me, inCircles, r.final.verdict);
+      // Automatic alerts come from protected members; a tap on "Tell my family" works for anyone.
+      const targets = force ? circles.map((c) => c.id) : r.final.riskScore >= p.familyAlertThreshold ? protectedIn : [];
+      if (!targets.length || alerted[r.id]) return;
+      setAlerted((a) => ({ ...a, [r.id]: 'sending' }));
+      try {
+        await fam.sendAlert(services.db, me, targets, r);
+        setAlerted((a) => ({ ...a, [r.id]: 'sent' }));
+      } catch (e) {
+        console.warn('Family alert failed', e);
+        setFamilyError('Could not alert your family. Check your connection and try again.');
+        setAlerted(({ [r.id]: _drop, ...rest }) => rest);
       }
     },
     [services, me, circles, alerted],
@@ -354,6 +392,24 @@ export default function App() {
       {!online && <div className="banner">You're offline. Kinguard can still check messages privately on this device.</div>}
       {!services && !USE_MOCK && <div className="banner warn">Setup needed: no Firebase project configured, so only the built-in rules are active.</div>}
 
+      {incoming && (
+        <button
+          className="incoming-toast"
+          role="alert"
+          onClick={() => {
+            setTab('home');
+            setIncoming(null);
+            window.scrollTo({ top: 0 });
+          }}
+        >
+          <span className="incoming-bell" aria-hidden>🔔</span>
+          <span className="incoming-text">
+            <strong>{incoming.fromName} may have received a scam</strong>
+            <span>{incoming.headline} · risk {incoming.riskScore}</span>
+          </span>
+          <span className="incoming-view">View</span>
+        </button>
+      )}
       <main className="content">
         {tab === 'home' &&
           (!authReady ? (

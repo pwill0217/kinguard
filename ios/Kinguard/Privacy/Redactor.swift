@@ -34,13 +34,13 @@ private func regex(_ pattern: String, _ options: NSRegularExpression.Options = [
 }
 
 private enum Patterns {
-    nonisolated(unsafe) static let email = regex(#"[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}"#, [.caseInsensitive])
-    nonisolated(unsafe) static let ssn = regex(#"\b\d{3}-\d{2}-\d{4}\b"#)
-    nonisolated(unsafe) static let card = regex(#"\b(?:\d[ -]?){12,18}\d\b"#)
-    nonisolated(unsafe) static let phone = regex(#"(?<![\w$])(?:\+?\d{1,3}[\s.-]?)?(?:\(\d{2,4}\)|\d{2,4})[\s.-]\d{3,4}[\s.-]\d{3,4}(?!\w)"#)
-    nonisolated(unsafe) static let account = regex(#"(?<![$\d.,])\b\d{6,}\b(?![.,]\d)"#)
-    nonisolated(unsafe) static let urlQuery = regex(#"(https?://[^\s?#]+)\?[^\s#]+"#, [.caseInsensitive])
-    nonisolated(unsafe) static let placeholder = regex(#"\[([A-Z]+_\d+)\]"#)
+    static let email = regex(#"[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}"#, [.caseInsensitive])
+    static let ssn = regex(#"\b\d{3}-\d{2}-\d{4}\b"#)
+    static let card = regex(#"\b(?:\d[ -]?){12,18}\d\b"#)
+    static let phone = regex(#"(?<![\w$])(?:\+?\d{1,3}[\s.-]?)?(?:\(\d{2,4}\)|\d{2,4})[\s.-]\d{3,4}[\s.-]\d{3,4}(?!\w)"#)
+    static let account = regex(#"(?<![$\d.,])\b\d{6,}\b(?![.,]\d)"#)
+    static let urlQuery = regex(#"(https?://[^\s?#]+)\?[^\s#]+"#, [.caseInsensitive])
+    static let placeholder = regex(#"\[([A-Z]+_\d+)\]"#)
 }
 
 /// Brands and common words a small model sometimes flags; they are scam signals and must stay readable.

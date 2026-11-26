@@ -1,5 +1,6 @@
 /* Kinguard design system: modern family-safety app. */
 :root {
+  color-scheme: light;
   --bg: #f4f2fb;
   --surface: #ffffff;
   --ink: #17142e;
@@ -346,3 +347,12 @@ textarea:focus, input:focus { border-color: var(--brand); outline: none; box-sha
   .hero-card h1 { font-size: 1.4rem; }
 }
 @media (prefers-reduced-motion: reduce) { * { animation: none !important; transition: none !important; } }
+
+/* Live family alert toast */
+.incoming-toast { position: fixed; top: 12px; left: 50%; transform: translateX(-50%); z-index: 60; width: min(560px, calc(100% - 24px)); display: flex; align-items: center; gap: 12px; padding: 14px; border: 0; border-radius: 20px; background: linear-gradient(135deg, #ff5a5f, #e23b3f); color: #fff; text-align: left; box-shadow: 0 14px 34px rgba(226, 59, 63, 0.35); cursor: pointer; animation: toast-in 0.35s ease-out; font: inherit; }
+.incoming-bell { width: 42px; height: 42px; flex: none; display: grid; place-items: center; border-radius: 50%; background: rgba(255, 255, 255, 0.2); font-size: 1.2rem; }
+.incoming-text { flex: 1; display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+.incoming-text span { font-size: 0.82rem; opacity: 0.92; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.incoming-view { font-size: 0.78rem; font-weight: 800; padding: 6px 10px; border-radius: 999px; background: rgba(255, 255, 255, 0.22); }
+@keyframes toast-in { from { opacity: 0; transform: translate(-50%, -16px); } to { opacity: 1; transform: translate(-50%, 0); } }
+@media (prefers-reduced-motion: reduce) { .incoming-toast { animation: none; } }

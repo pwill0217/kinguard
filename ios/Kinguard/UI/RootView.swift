@@ -41,6 +41,53 @@ struct RootView: View {
             .tag(AppTab.settings)
         }
         .tint(KG.brand)
+        // Kinguard's palette is designed for light backgrounds; keep it readable in Dark Mode.
+        .preferredColorScheme(.light)
+        .overlay(alignment: .top) {
+            if let alert = family.incoming {
+                IncomingAlertBanner(alert: alert) {
+                    tab = .circle
+                    family.dismissIncoming()
+                }
+                .padding(.horizontal)
+                .transition(.move(edge: .top).combined(with: .opacity))
+                .task(id: alert.id) {
+                    try? await Task.sleep(for: .seconds(8))
+                    family.dismissIncoming(alert.id)
+                }
+            }
+        }
+        .animation(.spring(duration: 0.35), value: family.incoming?.id)
+        .onChange(of: family.me?.uid) { _, _ in
+            // "Family told" belongs to whoever sent it; reset when the account changes.
+            model.alertState = [:]
+        }
+    }
+}
+
+struct IncomingAlertBanner: View {
+    let alert: FamilyAlert
+    var onTap: () -> Void
+
+    var body: some View {
+        Button(action: onTap) {
+            HStack(spacing: 12) {
+                Image(systemName: "bell.badge.fill").font(.title3).foregroundStyle(.white)
+                    .frame(width: 42, height: 42).background(.white.opacity(0.2), in: Circle())
+                VStack(alignment: .leading, spacing: 2) {
+                    Text("\(alert.fromName) may have received a scam").font(.subheadline.weight(.heavy))
+                    Text("\(alert.headline) · risk \(alert.riskScore)").font(.caption).opacity(0.9).lineLimit(2)
+                }
+                Spacer(minLength: 0)
+                Text("View").font(.caption.weight(.heavy)).padding(.horizontal, 10).padding(.vertical, 6)
+                    .background(.white.opacity(0.22), in: Capsule())
+            }
+            .foregroundStyle(.white)
+            .padding(14)
+            .background(KG.alertGrad, in: RoundedRectangle(cornerRadius: 20, style: .continuous))
+            .shadow(color: KG.bad.opacity(0.35), radius: 16, y: 8)
+        }
+        .buttonStyle(.plain)
     }
 }
 

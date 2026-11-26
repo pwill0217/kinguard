@@ -72,7 +72,7 @@ final class AppModel {
         alertState[r.id] = "sending"
         let ok = await family.share(r, alertThreshold: policy.familyAlertThreshold, force: true)
         alertState[r.id] = ok ? "sent" : nil
-        if !ok { errorMessage = "Mark yourself as protected in a family circle to send alerts." }
+        if !ok { errorMessage = "Create or join a family circle first, then try again." }
     }
 
     func clearHistory() {

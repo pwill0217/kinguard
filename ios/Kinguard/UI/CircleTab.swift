@@ -160,7 +160,7 @@ struct CircleTab: View {
                 HStack(spacing: 12) {
                     Avatar(name: me.name, url: me.photoURL)
                     VStack(alignment: .leading) {
-                        (Text(me.name).bold() + Text(" (you)").foregroundStyle(KG.muted))
+                        Text("\(Text(me.name).bold())\(Text(" (you)").foregroundStyle(KG.muted))")
                         Text(me.email ?? "").font(.caption).foregroundStyle(KG.muted)
                     }
                 }
@@ -317,7 +317,7 @@ struct MemberRow: View {
         HStack(spacing: 12) {
             Avatar(name: member.name, url: member.photoURL, ring: member.isProtected ? member.lastCheck?.verdict : nil)
             VStack(alignment: .leading, spacing: 2) {
-                (Text(member.name).bold().foregroundStyle(KG.ink) + Text(isMe ? " (you)" : "").foregroundStyle(KG.muted))
+                Text("\(Text(member.name).bold().foregroundStyle(KG.ink))\(Text(isMe ? " (you)" : "").foregroundStyle(KG.muted))")
                 Text(status.0).font(.caption.weight(.semibold)).foregroundStyle(status.1)
             }
             Spacer()
@@ -349,7 +349,7 @@ struct AlertRow: View {
                         .background(.white, in: Circle()).offset(x: 4, y: 4)
                 }
             VStack(alignment: .leading, spacing: 3) {
-                (Text(mine ? "You" : alert.fromName).bold() + Text(" · \(alert.headline)"))
+                Text("\(Text(mine ? "You" : alert.fromName).bold()) · \(alert.headline)")
                     .font(.subheadline)
                 Text("\(alert.category.label) · risk \(alert.riskScore) · \(timeAgo(alert.createdAt))")
                     .font(.caption).foregroundStyle(KG.muted)

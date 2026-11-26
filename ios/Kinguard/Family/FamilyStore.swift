@@ -102,6 +102,10 @@ final class FamilyStore {
     private(set) var members: [Member] = []
     private(set) var alerts: [FamilyAlert] = []
     private(set) var invites: [Invite] = []
+    /// A new alert from someone else in the circle, shown as an in-app banner.
+    private(set) var incoming: FamilyAlert?
+    private var seenAlertIds = Set<String>()
+    private var alertsPrimed = false
 
     var circle: FamilyCircle? { circles.first { $0.id == currentCircleId } ?? circles.first }
     var myRole: Role? { members.first { $0.id == me?.uid }?.role }
@@ -129,6 +133,7 @@ final class FamilyStore {
             me = Me(uid: user.uid, name: name, firstName: name.components(separatedBy: " ").first ?? name,
                     photoURL: user.photoURL, email: user.email)
             watchCircles()
+            Notifier.requestPermission()
         } else {
             me = nil
             circlesListener?.remove()
@@ -197,6 +202,9 @@ final class FamilyStore {
 
     private func watchCurrentCircle() {
         stopCircleListeners()
+        seenAlertIds = []
+        alertsPrimed = false
+        incoming = nil
         guard me != nil, let id = circle?.id else { return }
         let ref = db.collection("circles").document(id)
         circleListeners.append(ref.collection("members").addSnapshotListener { [weak self] snap, _ in
@@ -235,6 +243,7 @@ final class FamilyStore {
                                        ackBy: v["ackBy"] as? [String] ?? [], ackNames: v["ackNames"] as? [String] ?? [])
                 }
                 self.alerts = list
+                self.noticeNewAlerts(list)
                 }
             })
         circleListeners.append(db.collection("invites").whereField("circleId", isEqualTo: id).whereField("revoked", isEqualTo: false)
@@ -248,6 +257,23 @@ final class FamilyStore {
                 self.invites = list
                 }
             })
+    }
+
+    /// The first snapshot is history; anything that appears after it from someone else is a live alert.
+    private func noticeNewAlerts(_ list: [FamilyAlert]) {
+        let ids = Set(list.map(\.id))
+        defer { seenAlertIds.formUnion(ids) }
+        guard alertsPrimed else {
+            alertsPrimed = true
+            return
+        }
+        guard let me, let fresh = list.first(where: { !seenAlertIds.contains($0.id) && $0.fromUid != me.uid }) else { return }
+        incoming = fresh
+        Notifier.announce(fresh, circleName: circle?.name ?? "your family")
+    }
+
+    func dismissIncoming(_ id: String? = nil) {
+        if id == nil || incoming?.id == id { incoming = nil }
     }
 
     nonisolated private static func invite(from code: String, _ v: [String: Any]) -> Invite? {
@@ -388,15 +414,16 @@ final class FamilyStore {
             let snap = try? await db.collection("circles").document(c.id).collection("members").document(me.uid).getDocument()
             if snap?.data()?["protected"] as? Bool == true { protectedIn.append(c.id) }
         }
-        guard !protectedIn.isEmpty else { return false }
         for id in protectedIn {
             try? await db.collection("circles").document(id).collection("members").document(me.uid).updateData([
                 "lastCheck": ["at": FieldValue.serverTimestamp(), "verdict": result.final.verdict.rawValue],
             ])
         }
-        guard force || result.final.riskScore >= alertThreshold else { return false }
+        // Automatic alerts come from protected members; tapping "Tell my family" works for anyone in a circle.
+        let targets = force ? circles.map(\.id) : (result.final.riskScore >= alertThreshold ? protectedIn : [])
+        guard !targets.isEmpty else { return false }
         let s = result.shareable
-        for id in protectedIn {
+        for id in targets {
             try? await db.collection("circles").document(id).collection("alerts").document().setData([
                 "fromUid": me.uid, "fromName": String(me.firstName.prefix(40)), "verdict": s.verdict.rawValue,
                 "riskScore": s.riskScore, "category": s.category.rawValue, "headline": String(s.headline.prefix(200)),

@@ -7,7 +7,7 @@ struct LinkFinding: Codable, Hashable {
 }
 
 enum LinkInspector {
-    nonisolated(unsafe) private static let urlish = try! NSRegularExpression(
+    private static let urlish = try! NSRegularExpression(
         pattern: #"\b((?:https?://)?(?:[a-z0-9-]+\.)+[a-z]{2,}(?:/[^\s<>"')\]]*)?)"#,
         options: [.caseInsensitive]
     )

@@ -81,7 +81,7 @@ struct ResultView: View {
                         ForEach(f.redFlags, id: \.self) { fl in
                             HStack(alignment: .top) {
                                 Image(systemName: "exclamationmark.circle.fill").foregroundStyle(KG.bad)
-                                (Text(fl.signal).bold() + Text(fl.why.isEmpty ? "" : " · \(fl.why)").foregroundStyle(KG.muted))
+                                Text("\(Text(fl.signal).bold())\(Text(fl.why.isEmpty ? "" : " · \(fl.why)").foregroundStyle(KG.muted))")
                                     .font(.subheadline)
                             }
                         }
@@ -99,7 +99,7 @@ struct ResultView: View {
                         }
                     }
                     if !f.howToVerify.isEmpty {
-                        (Text("Check for yourself: ").bold() + Text(f.howToVerify))
+                        Text("\(Text("Check for yourself: ").bold())\(f.howToVerify)")
                             .font(.subheadline)
                             .padding(12)
                             .frame(maxWidth: .infinity, alignment: .leading)
@@ -117,8 +117,7 @@ struct ResultView: View {
                         HStack(alignment: .top, spacing: 10) {
                             WhereBadge(place: e.place)
                             VStack(alignment: .leading, spacing: 2) {
-                                Text(e.step).font(.subheadline.weight(.bold))
-                                    + Text(e.seconds.map { String(format: " · %.1fs", $0) } ?? "").foregroundStyle(KG.muted)
+                                Text("\(Text(e.step).font(.subheadline.weight(.bold)))\(Text(e.seconds.map { String(format: " · %.1fs", $0) } ?? "").font(.subheadline).foregroundStyle(KG.muted))")
                                 if let note = e.note { Text(note).font(.caption).foregroundStyle(KG.muted) }
                             }
                         }
@@ -136,9 +135,7 @@ struct ResultView: View {
                     if !r.links.isEmpty {
                         Text("Links in the message").font(.subheadline.weight(.heavy)).padding(.top, 4)
                         ForEach(r.links, id: \.host) { l in
-                            (Text(l.host).font(.system(.caption, design: .monospaced)).bold()
-                                + Text(l.signals.isEmpty ? " · no warning signs" : " · " + l.signals.joined(separator: "; "))
-                                .font(.caption).foregroundStyle(l.signals.isEmpty ? KG.muted : KG.bad))
+                            Text("\(Text(l.host).font(.system(.caption, design: .monospaced)).bold())\(Text(l.signals.isEmpty ? " · no warning signs" : " · " + l.signals.joined(separator: "; ")).font(.caption).foregroundStyle(l.signals.isEmpty ? KG.muted : KG.bad))")
                         }
                     }
                 }
